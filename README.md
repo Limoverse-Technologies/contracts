@@ -1,5 +1,5 @@
 # Smart Contracts
 
 - [x] Token contract
-- [ ] Vesting contract
+- [x] Vesting contract
 - [ ] Staking contract
