@@ -5,6 +5,7 @@ pragma solidity 0.8.9;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "hardhat/console.sol";
 
 contract Staking is Ownable, AccessControl {
     // Token used for staking
@@ -15,6 +16,7 @@ contract Staking is Ownable, AccessControl {
 
     event AddStaking(address owner, uint256 amount, uint256 releaseTime);
     event PushStakingReward(uint256 amount);
+    event WithdrawStaking(address owner, uint256 amount, uint256 burnAmount);
 
     struct Stake {
         uint256 releaseTime;
@@ -98,7 +100,21 @@ contract Staking is Ownable, AccessControl {
     function unStake(
         uint256 _amount
     ) external {
-        
+        uint256 burnAmount;
+        require(_amount > 0, "greater than zero");
+        Stake storage _stake = stakes[msg.sender];
+        require(_amount <= _stake.amount, "balance low");
+        require(_stake.releaseTime < block.timestamp, "token locked");
+        require(stakingToken.transfer(msg.sender, _amount),
+            "not transfered");
+        _stake.amount -= _amount;
+        _totalSupply -= _amount;
+        if(twoXRewards[msg.sender] > _stake.amount){
+            burnAmount = twoXRewards[msg.sender] - _stake.amount;
+            twoXRewards[msg.sender] = _stake.amount;
+            _totalRewardSupply -= burnAmount;
+        }
+        emit WithdrawStaking(msg.sender, _amount, burnAmount);
     }
 
     function pushStakingRewards(
@@ -109,17 +125,26 @@ contract Staking is Ownable, AccessControl {
         uint256 totalHolding = _totalSupply + _totalRewardSupply;
         for (uint i = 0; i < stakeHolders.length; i++) {
             uint256 totalUserHolding = stakes[stakeHolders[i]].amount + twoXRewards[stakeHolders[i]];
-            uint256 pecentage = totalHolding * totalUserHolding / 100;
+            uint256 pecentage = totalUserHolding * 100 / totalHolding;
             uint256 _reward = _amount * pecentage / 100;
             _balances[stakeHolders[i]] += _reward;
         }
         emit PushStakingReward(_amount);
     }
-
     function claimReward() external {
         require(_balances[msg.sender] > 0, "no balance for claim");
         require(
-            stakingToken.transferFrom(address(this), msg.sender, _balances[msg.sender]),
+            stakingToken.transfer(msg.sender, _balances[msg.sender]),
             "reward transfer failed");
+        _balances[msg.sender] = 0;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function stakeBalanceOf(address account) public view virtual returns (uint256) {
+        Stake memory _stake = stakes[account];
+        return _stake.amount;
     }
 }
