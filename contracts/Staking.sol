@@ -12,6 +12,7 @@ contract Staking is Ownable, AccessControl {
     ERC20 stakingToken;
     uint256 private _totalSupply;
     uint256 private _totalRewardSupply;
+    uint256 private referralPercentage = 1000; // 10%
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
 
     event AddStaking(address owner, uint256 amount, uint256 releaseTime);
@@ -28,6 +29,7 @@ contract Staking is Ownable, AccessControl {
     mapping (address => bool) private stakesInserted;
     mapping (address => uint256) private twoXRewards;
     mapping (address => uint256) private _balances;
+    mapping (address => address) private referrals;
 
     address[] private stakeHolders;
 
@@ -39,7 +41,6 @@ contract Staking is Ownable, AccessControl {
         require(
         stakingToken.transferFrom(_address, address(this), _amount),
         "Stake required");
-
         _;
     }
 
@@ -49,6 +50,8 @@ contract Staking is Ownable, AccessControl {
     */
     constructor(ERC20 _stakingToken){
         stakingToken = _stakingToken;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(CREATOR_ROLE, msg.sender);
     }
 
     function createStake(
@@ -79,6 +82,8 @@ contract Staking is Ownable, AccessControl {
         uint256 _amount
     ) external onlyRole(CREATOR_ROLE) {
         require(_amount > 0, "amount not valid");
+        Stake memory _stake = stakes[_address];
+        require(_stake.amount >= twoXRewards[_address] + _amount, "don't have sufficient token");
         twoXRewards[_address] += _amount;
         _totalRewardSupply += _amount;
     }
@@ -87,6 +92,10 @@ contract Staking is Ownable, AccessControl {
         uint256 _amount
     ) external {
         createStake(msg.sender, _amount, 0);
+    }
+
+    function addReferral(address _referral) external {
+        referrals[msg.sender] = _referral;
     }
 
     function stakeFor(
@@ -131,10 +140,18 @@ contract Staking is Ownable, AccessControl {
         }
         emit PushStakingReward(_amount);
     }
+
     function claimReward() external {
         require(_balances[msg.sender] > 0, "no balance for claim");
+        uint256 referralAmount = 0;
+        if(referrals[msg.sender] != address(0)){
+            referralAmount = _balances[msg.sender] * referralPercentage / 10000;
+            require(
+                stakingToken.transfer(referrals[msg.sender], referralAmount),
+                "reward transfer failed");
+        }
         require(
-            stakingToken.transfer(msg.sender, _balances[msg.sender]),
+            stakingToken.transfer(msg.sender, _balances[msg.sender] - referralAmount),
             "reward transfer failed");
         _balances[msg.sender] = 0;
     }
@@ -146,5 +163,9 @@ contract Staking is Ownable, AccessControl {
     function stakeBalanceOf(address account) public view virtual returns (uint256) {
         Stake memory _stake = stakes[account];
         return _stake.amount;
+    }
+
+    function twoXBalanceOf(address account) public view virtual returns (uint256) {
+        return twoXRewards[account];
     }
 }
