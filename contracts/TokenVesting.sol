@@ -45,8 +45,17 @@ contract TokenVesting is Ownable, ReentrancyGuard{
     uint256 private vestingSchedulesTotalAmount;
     mapping(address => uint256) private holdersVestingCount;
 
-    event Released(uint256 amount);
-    event Revoked();
+    event Released(address owner, uint256 amount);
+    event Revoked(bytes32 vestingScheduleId);
+    event CreateVesting(
+        address beneficiary,
+        uint256 start,
+        uint256 cliff,
+        uint256 duration,
+        uint256 slicePeriodSeconds,
+        bool revocable,
+        uint256 amount
+    );
 
     /**
     * @dev Reverts if no vesting schedule matches the passed identifier.
@@ -69,9 +78,10 @@ contract TokenVesting is Ownable, ReentrancyGuard{
      * @dev Creates a vesting contract.
      * @param token_ address of the ERC20 token contract
      */
-    constructor(address token_) {
+    constructor(address token_, address _multisig) {
         require(token_ != address(0x0));
         _token = IERC20(token_);
+        _transferOwnership(_multisig);
     }
 
     receive() external payable {}
@@ -180,6 +190,16 @@ contract TokenVesting is Ownable, ReentrancyGuard{
         vestingSchedulesIds.push(vestingScheduleId);
         uint256 currentVestingCount = holdersVestingCount[_beneficiary];
         holdersVestingCount[_beneficiary] = currentVestingCount.add(1);
+        
+        emit CreateVesting(
+            _beneficiary,
+             _start,
+             _cliff,
+             _duration,
+             _slicePeriodSeconds,
+             _revocable,
+             _amount
+            );
     }
 
     /**
@@ -199,6 +219,7 @@ contract TokenVesting is Ownable, ReentrancyGuard{
         uint256 unreleased = vestingSchedule.amountTotal.sub(vestingSchedule.released);
         vestingSchedulesTotalAmount = vestingSchedulesTotalAmount.sub(unreleased);
         vestingSchedule.revoked = true;
+        emit Revoked(vestingScheduleId);
     }
 
     /**
@@ -238,6 +259,7 @@ contract TokenVesting is Ownable, ReentrancyGuard{
         address payable beneficiaryPayable = payable(vestingSchedule.beneficiary);
         vestingSchedulesTotalAmount = vestingSchedulesTotalAmount.sub(amount);
         _token.safeTransfer(beneficiaryPayable, amount);
+        emit Released(msg.sender, amount);
     }
 
     /**
