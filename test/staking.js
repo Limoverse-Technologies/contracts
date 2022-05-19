@@ -1,13 +1,16 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-let lemoToken, stakingInstance
+let lemoToken, stakingInstance, MultiInstance, owner, addr1, addr2, addr3
 
 before(async () => {
+  [owner, addr1, addr2, addr3] = await ethers.getSigners();
   const Limoverse = await ethers.getContractFactory("Limoverse");
   lemoToken = await Limoverse.deploy();
+  const Multisig = await ethers.getContractFactory("MultiSigWallet");
+  MultiInstance = await Multisig.deploy([owner.address, addr1.address, addr2.address], 2);
   const Staking = await ethers.getContractFactory("Staking");
-  stakingInstance = await Staking.deploy(lemoToken.address);
+  stakingInstance = await Staking.deploy(lemoToken.address,MultiInstance.address);
   await lemoToken.approve(stakingInstance.address, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 })
 
@@ -54,17 +57,32 @@ const unStake = async () => {
   expect(await lemoToken.balanceOf(addr2.address)).to.equal(ethers.utils.parseEther('10'));
 }
 
+// const createTwoXReward = async () => {
+//   const [owner,addr1] = await ethers.getSigners();
+//   await MultiInstance.createTwoXReward(addr1.address, ethers.utils.parseEther('10'));
+//   expect(await stakingInstance.twoXBalanceOf(addr1.address)).to.equal(ethers.utils.parseEther('10'));
+// }
+
 const createTwoXReward = async () => {
   const [owner,addr1] = await ethers.getSigners();
-  await stakingInstance.createTwoXReward(addr1.address, ethers.utils.parseEther('10'));
+  const transferEncoded = stakingInstance.interface.encodeFunctionData("createTwoXReward",[addr1.address, ethers.utils.parseEther('10')])
+  await MultiInstance.submitTransaction(stakingInstance.address, 0, transferEncoded);
+  await MultiInstance.connect(addr1).confirmTransaction(0)
+  await MultiInstance.connect(addr2).confirmTransaction(0)
+  await MultiInstance.connect(addr1).executeTransaction(0)
   expect(await stakingInstance.twoXBalanceOf(addr1.address)).to.equal(ethers.utils.parseEther('10'));
 }
 
 const createTwoXRewardError = async () => {
   const [owner,addr1] = await ethers.getSigners();
+  const transferEncoded = stakingInstance.interface.encodeFunctionData("createTwoXReward",[addr1.address, ethers.utils.parseEther('1100')])
+  await MultiInstance.submitTransaction(stakingInstance.address, 0, transferEncoded);
+  await MultiInstance.connect(addr1).confirmTransaction(1)
+  await MultiInstance.connect(addr2).confirmTransaction(1)
+  
   await expect(
-     stakingInstance.createTwoXReward(addr1.address,ethers.utils.parseEther('1100'))
-  ).to.be.revertedWith("don't have sufficient token")
+      MultiInstance.connect(addr1).executeTransaction(1)
+  ).to.be.revertedWith("tx failed")
 }
 
 const twoXExe = async () => {

@@ -4,20 +4,18 @@ pragma solidity 0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "hardhat/console.sol";
 
-contract Staking is Ownable, AccessControl {
+contract Staking is Ownable {
     // Token used for staking
     ERC20 stakingToken;
     uint256 private _totalSupply;
     uint256 private _totalRewardSupply;
     uint256 private referralPercentage = 1000; // 10%
-    bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
 
     event AddStaking(address owner, uint256 amount, uint256 releaseTime);
     event PushStakingReward(uint256 amount);
     event WithdrawStaking(address owner, uint256 amount, uint256 burnAmount);
+    event AddReferral(address by, address _address);
 
     struct Stake {
         uint256 releaseTime;
@@ -48,10 +46,9 @@ contract Staking is Ownable, AccessControl {
     * @dev Constructor function
     * @param _stakingToken ERC20 The address of the token contract used for staking
     */
-    constructor(ERC20 _stakingToken){
+    constructor(ERC20 _stakingToken, address _multisig){
         stakingToken = _stakingToken;
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(CREATOR_ROLE, msg.sender);
+        _transferOwnership(_multisig);
     }
 
     function createStake(
@@ -68,6 +65,7 @@ contract Staking is Ownable, AccessControl {
             stakesInserted[_address] = true;
             stakeHolders.push(_address);
         }
+
         if(_releaseTime > 0){
             require(_releaseTime > _stake.releaseTime, "release time not valid");
             _stake.releaseTime = _releaseTime;
@@ -80,7 +78,7 @@ contract Staking is Ownable, AccessControl {
     function createTwoXReward(
         address _address,
         uint256 _amount
-    ) external onlyRole(CREATOR_ROLE) {
+    ) external onlyOwner {
         require(_amount > 0, "amount not valid");
         Stake memory _stake = stakes[_address];
         require(_stake.amount >= twoXRewards[_address] + _amount, "don't have sufficient token");
@@ -96,13 +94,14 @@ contract Staking is Ownable, AccessControl {
 
     function addReferral(address _referral) external {
         referrals[msg.sender] = _referral;
+        emit AddReferral(msg.sender, _referral);
     }
 
     function stakeFor(
         address _address,
         uint256 _amount,
         uint256 _releaseTime
-    ) external {
+    ) external  {
         createStake(_address, _amount, _releaseTime);
     }
 
@@ -154,6 +153,11 @@ contract Staking is Ownable, AccessControl {
             stakingToken.transfer(msg.sender, _balances[msg.sender] - referralAmount),
             "reward transfer failed");
         _balances[msg.sender] = 0;
+    }
+
+    function setReferralPercentage(uint256 _percentage) external onlyOwner {
+        require(_percentage > 0 && _percentage <= 10000, "not valid");
+        referralPercentage = _percentage;
     }
 
     function balanceOf(address account) public view virtual returns (uint256) {
