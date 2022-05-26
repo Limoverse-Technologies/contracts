@@ -12,5 +12,5 @@
     "@nomiclabs/hardhat-etherscan": "^3.0.3",
     "@openzeppelin/contracts": "^4.5.0"
   },
-  "version": "0.0.2"
+  "version": "0.0.3"
 }
