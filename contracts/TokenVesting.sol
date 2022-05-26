@@ -61,7 +61,7 @@ contract TokenVesting is Ownable, ReentrancyGuard{
     * @dev Reverts if no vesting schedule matches the passed identifier.
     */
     modifier onlyIfVestingScheduleExists(bytes32 vestingScheduleId) {
-        require(vestingSchedules[vestingScheduleId].initialized == true);
+        require(vestingSchedules[vestingScheduleId].initialized == true, "vesting not exist");
         _;
     }
 
@@ -69,8 +69,8 @@ contract TokenVesting is Ownable, ReentrancyGuard{
     * @dev Reverts if the vesting schedule does not exist or has been revoked.
     */
     modifier onlyIfVestingScheduleNotRevoked(bytes32 vestingScheduleId) {
-        require(vestingSchedules[vestingScheduleId].initialized == true);
-        require(vestingSchedules[vestingScheduleId].revoked == false);
+        require(vestingSchedules[vestingScheduleId].initialized == true, "vesting not exist");
+        require(vestingSchedules[vestingScheduleId].revoked == false, "vesting already revoked");
         _;
     }
 
@@ -79,7 +79,7 @@ contract TokenVesting is Ownable, ReentrancyGuard{
      * @param token_ address of the ERC20 token contract
      */
     constructor(address token_, address _multisig) {
-        require(token_ != address(0x0));
+        require(token_ != address(0x0), "address not valid");
         _token = IERC20(token_);
         _transferOwnership(_multisig);
     }
